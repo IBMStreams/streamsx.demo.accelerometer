@@ -1,0 +1,150 @@
+<html>
+<!---
+# Copyright IBM Corp. 2013, 2014
+# Distribute this code under MIT License.
+
+  Written for the instance that you do not have a SmartPhone. 
+
+    This is part of an example, learn by using...
+    mags
+--->
+
+<head>
+   <link rel="stylesheet" href="support.css" type="text/css"></link> 
+    <title>Simulate Accelerometer</title>
+<script type="text/javascript" src="js/jquery-1.9.1.js"></script>
+<style type="text/css">
+	#bigbigbox{
+		margin:16px 16px 16px 48px;
+		border:1px groove blue;
+		background-color : #BBBBBB;
+		width:180px;
+		height:180px;
+	}
+	#msg{
+		color:#800000;
+	}
+</style>
+<script type="text/javascript">
+        var portID = 8084;
+	var i=0;
+	var gamma = 90;
+	var alpha = 90;
+	var beta = 101;
+	var count = 0;
+
+        function init() {
+                document.getElementById("formID").value = "DevId:" + Math.floor(Math.random()*100);
+                var ip = location.host;
+    	        nodeName = (ip.split(":") == 1) ? "ws://" + ip : ip.split(":")[0] + ":" + portID;
+                document.getElementById("formWS").value = nodeName;   	         
+	     // track the mouse.an
+	        $('#bigbigbox').mousemove(function(event) {
+	            beta = (event.pageY-156);
+	            alpha = (event.pageX-156);
+	            gamma = alpha + beta;
+	            count = i++;
+                    var msg = 'alpha:' + alpha + ' beta:' + beta +' gamma : ' + gamma + ' [counter]: ' + count;
+	            $('#track').text(msg);
+	        });
+        }
+
+	function mycode() {
+
+            var actDate = new Date();
+	    var currentTimeValue = actDate.getTime();
+	    currentTime.innerHTML = currentTimeValue;
+            var f = document.getElementById('features');
+            f.innerHTML = "ws :" + ws;
+            msg = "<MESSAGE>" +
+                    "<ID>" + document.getElementById("formID").value + "</ID>" +
+                    "<TIME>" + currentTimeValue + "</TIME>" +
+                    "<ALPHA>" + alpha + "</ALPHA>" +
+                    "<BETA>" + beta + "</BETA>" +
+                    "<GAMMA>" + gamma + "</GAMMA>" +
+                    "<X>" + 1.0 + "</X>" +
+                    "<Y>" + 1.0 + "</Y>" +
+                    "<Z>" + 1.0 + "</Z>" +
+                    "</MESSAGE>";
+
+            if (ws != null) {
+	        $('#transmitting').text(msg);
+                ws.send(msg)
+            }
+
+	}
+	function abortTimer() { // to be called when you want to stop the timer
+	     clearInterval(tid);
+	}
+
+	var tid = 0;
+        function WebSocketTest() {
+            if ("WebSocket" in window) {
+                var userMsg = document.getElementById('userMsg');
+                alert("WebSocket is supported by your Browser!");
+                // Let us open a web socket
+                var wsSoc = "ws://" + document.getElementById("formWS").value.trim();
+                ws = new WebSocket(wsSoc)
+                ws.onopen = function () {
+                    // Web Socket is connected, send data using send()
+                    ws.send("<CONTROL>ID "+ document.getElementById("formID").value  + " STARTING</CONTROL>");
+                    userMsg.innerHTML = "Transmitting on port : " + portID;
+                    alert("Message is sent...");
+                };
+                ws.onmessage = function (evt) {
+                    var received_msg = evt.data;
+                    userMsg.innerHTML = "Alert:<b>" + received_msg + "</b>";
+                    //alert("Message is received...");
+                };
+                ws.onclose = function () {
+                    // websocket is closed.
+                    alert("Connection is closed...");
+                    userMsg.innerHTML = "Connection closed....";
+                    ws = null;
+                };
+	        setInterval(mycode, 100);
+            }
+            else {
+                // The browser doesn't support WebSocket
+                alert("WebSocket NOT supported by your Browser!");
+            }
+        }
+        /// End of WebSocketTest()
+
+
+</script> 
+</head>
+<body onload="init()">
+  <h1>Simulator...</h1>
+  <p>Move cursor witin box to generate changes(you may need to select the box)</p> 
+  <div id="bigbigbox"></div>
+ 
+Tracking:  <p id="track"></p>
+ 
+<script type="text/javascript">
+ 
+</script>
+<tr>
+  <td><input type="text" id="formID"></td>
+  <td><input type="text" id="formWS"></td>
+</tr>
+
+<div id="sse">
+   push---> <a class="button blue" href="javascript:WebSocketTest()" >Start Transmitting</a>
+</div>
+<hr>
+Server Message:
+<br>
+<pre><span id="userMsg"></span></pre>
+<br>
+Transmitting Message:
+<br>
+<pre><span id="transmitting"></span></pre>
+<br>
+Socket: <span id="features"></span><br>
+TimeStamp:<span id="currentTime"></span><br>
+
+
+
+</body>
+</html>

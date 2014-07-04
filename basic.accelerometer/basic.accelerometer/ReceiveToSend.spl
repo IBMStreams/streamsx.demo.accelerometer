@@ -1,0 +1,87 @@
+namespace basic.accelerometer ;
+use com.ibm.streamsx.inet.wsserver::*;
+use com.ibm.streamsx.inet.rest::WebContext;
+/*
+# Copyright IBM Corp. 2011, 2012, 2013, 2014
+# Distribute this code under MIT License
+*/
+type render_type = tuple<rstring id, float64 rangeSmall, float64 rangeMed, float64 rangeBig, rstring nameSmall,
+	rstring nameMed, rstring nameBig> ;
+	/**
+ * ReceiveToSend() application. 
+ * 
+ * This application is meant as a starting point for experimenting 
+ * with live-time processing. Please abuse it in the manner you 
+ * deem fit.
+ * 
+ * The application uses WebSockets. It receives 
+ * data on WebSocket (8084) and sends it out   
+ * on port (8085). The received live data is from accelerometers, 
+ * extracted from smartphones (iPhone, nexus....) with 
+ * the help of HTML5. The transmitted data is rendered as a graph
+ * with the help of 'Smoothie Charts'. The smartphones connect to
+ * the Stream instance and exchange data.
+ * 
+ * The received data is a XML document in a rstring, the
+ * FormatXML composite operator converts the rstring into a accel_type tuple.
+ * The tuple is transmitted with Send(), Send() transforms the tuple into
+ * JSON before sending it.
+ * 
+ * Any number of clients can transmit into this application. 
+ * Any number of clients can receive from this application. 
+ * All the received data is interleaved and presented 
+ * on the output page in a dynamic graph.
+ * 
+ * The application has two input and one output web pages that must be 
+ * accessed via the http server (note com.ibm.streamsx.inet.rest.WebContext()
+ * operator). After starting the application, access the applicaton's
+ * webpage using the locahost's ip address on port 8080 (ie:http://<ipAddress>:8080.)
+ *
+ * When running within a VM you may need to modify your VM's network settings. 
+ * To demonstrate live real-time accelerometer data from smartphones, 
+ * your smartphone needs to access the Streams instance running within the VM. 
+ * The change involves setting your network configuration in order that '...
+ * virtual machine appears as an additional computer on the same physical network connection
+ * as your' Mac/PC. This is accomplished with the VM's settings, enter the
+ * *Network Adapter* subpanel and set the *Internet Sharing* option to
+ * *Bridged Networking*. 
+ *   
+ */
+composite ReceiveToSend {
+	graph
+		(stream<rstring wsMessage, rstring wsRemoteId> wsReceive)as WsReceive = WebSocketInject(){
+			param
+				port : 8084 ;
+				messageAttribute : "wsMessage" ;
+				senderIdAttribute : "wsRemoteId" ;
+		}
+
+		()as RawDisplay = FileSink(wsReceive){
+			param
+				file : "/dev/stdout" ;
+				format : csv ;
+		}
+
+		(stream<accel_type> formattedXML)as FormatXML_3 = FormatXML(wsReceive){
+		}
+		stream<render_type> renderData = Functor(formattedXML){
+			output
+				renderData : id = id, rangeMed = beta, rangeSmall = z, rangeBig = gamma, nameMed = "Direction Beta", nameSmall =
+					"Gravity Z", nameBig = "Direction Gamma" ;
+		}
+
+		()as WsSend = WebSocketSend(renderData){
+			param
+				port : 8085 ;
+		}
+		/* NO input/output ports, bring up the webserver that hosts 
+		 * the web pages that connect via WebSockets.
+		 */
+		()as WebContext_5 = WebContext(){
+			param
+				port : 8080 ;
+				context : "html" ;
+				contextResourceBase : getThisFileDir()+ "/../data/html" ;				
+		}
+}
+

@@ -1,0 +1,234 @@
+<!DOCTYPE HTML>
+<html>
+<!---
+# Copyright IBM Corp. 2011, 2012, 2013, 2014
+# Distribute this code under MIT License
+
+  This receives message from the server WebSockets 
+  and writes it to the text area and to 
+  a graph.
+
+    This is part of an example, learn by using...
+    mags
+----->
+<head>
+    <title>Test Server WebSocket Sink</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <link rel="stylesheet" href="support.css" type="text/css"></link>
+    <script type="text/javascript" src="js/smoothie.js"></script>
+
+<script type="text/javascript">
+// Some variables....
+var ws = null;
+var nodeName = "9.72.139.132";
+var portID = "8085";
+var RenderData = {};
+// this table needs to correspond to the html table below.
+var ColorW = new Array('#FF0000','#FFFF00','#00FF00',
+                       '#0000FF','#CC3300','#00FFFF',
+                       '#FF00FF','#0F770F','#FFFFFF');
+var wCnt = 0;
+var smoothieSmall;
+var smoothieMed;
+var smoothieBig;
+
+// Extract the json from the batch portion. 
+function extractBatch(msg) {
+    parser = new DOMParser();
+    var xmlDoc = parser.parseFromString(msg,"text/xml");
+    var x=xmlDoc.getElementsByTagName("BATCH");
+    if (x.length == 0) 
+	return("")
+    return(x[0].childNodes[0].nodeValue)
+}
+// User has selected the link, they want to see the data from server. 
+//    - connect up to server
+//    - data flows in via the onmessage. 
+function StartWebSocket()
+{
+  if ("WebSocket" in window)
+  {
+     alert("WebSocket is supported by your Browser!");
+     // Let us open a web socket
+     var serverNode = (document.getElementById("formWS").value).trim();
+     ws = new WebSocket("ws://" + serverNode);	 
+     ws.onopen = function()
+     {
+        // Web Socket is connected, send data using send()
+        ws.send("Message to Server, send me data....");
+        alert("Connection established, message sent ...");
+     };
+     ws.onmessage = function (evt) 
+     { 
+        var received_msg = evt.data;
+        var json_msg = JSON.parse(received_msg);
+        if ('control' in json_msg)  {
+            var controlOut = document.getElementById("control");
+	    	controlOut.innerHTML = "<b><p>" + json_msg.control.status + ":" + json_msg.control.value + "</p></b>";
+        } else {
+		    var tuple = json_msg.tuples[0].tuple;
+            // write text into document
+	    	document.getElementById("SessID").innerHTML = tuple.id;	   
+            // write into graph
+	        if (!RenderData.hasOwnProperty(tuple.id) ) { // new entry 
+				RenderData[tuple.id] = new Object();
+				RenderData[tuple.id].connectsSmall = new TimeSeries();
+				RenderData[tuple.id].connectsMed = new TimeSeries();
+				RenderData[tuple.id].connectsBig = new TimeSeries();
+				RenderData[tuple.id].index = wCnt % ColorW.length;
+				smoothieSmall.addTimeSeries(RenderData[tuple.id].connectsSmall, 
+	                          { strokeStyle:ColorW[RenderData[tuple.id].index] });
+				smoothieMed.addTimeSeries(RenderData[tuple.id].connectsMed,  
+                              { strokeStyle:ColorW[RenderData[tuple.id].index] });
+				smoothieBig.addTimeSeries(RenderData[tuple.id].connectsBig,  
+                              { strokeStyle:ColorW[RenderData[tuple.id].index] });
+				wCnt++;
+        	}
+	    	var idxStr = (RenderData[tuple.id].index).toString();
+		    document.getElementById("devId" + idxStr).innerHTML = tuple.id +"<br>"; ;
+	    	if (tuple.nameSmall != "NONE") {
+			    document.getElementById("rangeSmall" + idxStr).innerHTML = tuple.rangeSmall +"<br>";
+		    	document.getElementById("nameSmall" + idxStr).innerHTML = tuple.nameSmall ;
+				RenderData[tuple.id].connectsSmall.append(new Date().getTime(), tuple.rangeSmall);
+        	}
+		    if (tuple.nameMed != "NONE") {
+				document.getElementById("rangeMed"+ idxStr).innerHTML = tuple.rangeMed  +"<br>";
+				document.getElementById("nameMed"+ idxStr).innerHTML = tuple.nameMed ;
+				RenderData[tuple.id].connectsMed.append(new Date().getTime(), tuple.rangeMed);
+		    }
+	    	if (tuple.nameBig != "NONE") {
+				document.getElementById("rangeBig"+ idxStr).innerHTML = tuple.rangeBig  +"<br>";
+				document.getElementById("nameBig"+ idxStr).innerHTML = tuple.nameBig ;
+				RenderData[tuple.id].connectsBig.append(new Date().getTime(), tuple.rangeBig);
+	    	}
+		}
+     };
+     ws.onclose = function()  { 
+        // websocket is closed.
+        alert("Connection is closed..."); 
+        ws = null;
+     };
+  }
+  else
+  {
+     // The browser doesn't support WebSocket
+     alert("WebSocket NOT supported by your Browser!");
+  }
+}
+//
+// Invoked when the window is loaded.....
+function startUp() {
+    // Buld the WS uri, get the IP address to build. 
+    var ip = location.host;
+    nodeName = (ip.split(":") == 1) ? "ws://" + ip : ip.split(":")[0] + ":" + portID;
+    document.getElementById("formWS").value = nodeName;   	             
+    smoothieSmall = new SmoothieChart({maxValue:50,minValue:-50});
+    smoothieSmall.streamTo(document.getElementById("mycanvasSmall"));
+    smoothieMed = new SmoothieChart({maxValue:90,minValue:-90});
+    smoothieMed.streamTo(document.getElementById("mycanvasMed"));
+    smoothieBig = new SmoothieChart({maxValue:200,minValue:-200});
+    smoothieBig.streamTo(document.getElementById("mycanvasBig"));
+}
+window.onload = function() {startUp();}
+</script>
+
+</head>
+<body>
+<h2>WebSocketServerSink messages... </h2>
+<p>The WebSocketServerSink operator has a port parameter that specifies 
+    which port it will wait for connections on. This client will connect
+    to that port port (8085 in this case). 
+<p>
+   <p>Connecting to ws://<input type="text" id="formWS"></p>
+<p>
+<div id="sse">
+ <center>
+   <a class="button green" href="javascript:StartWebSocket()" >Start Receiving</a>
+ </center>
+</div>
+<h2>Messages Received from Server on WebSocket interface:</h2>
+<p>After pushing the button above tuples flowing into the WebSocketServerSink operator 
+   of the Stream's application are transmitted via WebSockets and displayed below.
+</p>
+<h3>Control message</h3>
+<span id="control"></span></p>
+<p>
+<hr>
+
+<h3>Standard messages:</h3>
+<h2>Messsage from ID:<span id="SessID"></span></h2>
+<br>
+    <canvas id="mycanvasSmall" width="300" height="Med"></canvas>
+<br>
+    <canvas id="mycanvasMed" width="300" height="Med"></canvas>
+<br>
+    <canvas id="mycanvasBig" width="300" height="Med"></canvas>
+<br>
+<a href="http://smoothiecharts.org">smoothiecharts</a>
+
+<table>
+<tr>
+   <td bgcolor="#FF0000">
+    ID:<span id="devId0"></span>
+    <span id="nameSmall0"></span>:<span id="rangeSmall0"></span>
+    <span id="nameMed0"></span>:<span id="rangeMed0"></span>
+    <span id="nameBig0"></span>:<span id="rangeBig0"></span>
+   </td>   
+   <td bgcolor="#FFFF00">
+    ID:<span id="devId1"></span>
+    <span id="nameSmall1"></span>:<span id="rangeSmall1"></span>
+    <span id="nameMed1"></span>:<span id="rangeMed1"></span>
+    <span id="nameBig1"></span>:<span id="rangeBig1"></span>
+   </td>   
+   <td bgcolor="#00FF00">
+    ID:<span id="devId2"></span>
+    <span id="nameSmall2"></span>:<span id="rangeSmall2"></span>
+    <span id="nameMed2"></span>:<span id="rangeMed2"></span>
+    <span id="nameBig2"></span>:<span id="rangeBig2"></span>
+   </td>
+</tr>
+<tr>
+   <td bgcolor="#0000FF">
+    ID:<span id="devId3"></span>
+    <span id="nameSmall3"></span>:<span id="rangeSmall3"></span>
+    <span id="nameMed3"></span>:<span id="rangeMed3"></span>
+    <span id="nameBig3"></span>:<span id="rangeBig3"></span>
+   </td>   
+   <td bgcolor="#CC3300">
+    ID:<span id="devId4"></span>
+    <span id="nameSmall4"></span>:<span id="rangeSmall4"></span>
+    <span id="nameMed4"></span>:<span id="rangeMed4"></span>
+    <span id="nameBig4"></span>:<span id="rangeBig4"></span>
+   </td>   
+   <td bgcolor="#00FFFF">
+    ID:<span id="devId5"></span>
+    <span id="nameSmall5"></span>:<span id="rangeSmall5"></span>
+    <span id="nameMed5"></span>:<span id="rangeMed5"></span>
+    <span id="nameBig5"></span>:<span id="rangeBig5"></span>
+   </td>
+</tr>
+<tr>
+   <td bgcolor="#FF00FF">
+    ID:<span id="devId6"></span>
+    <span id="nameSmall6"></span>:<span id="rangeSmall6"></span>
+    <span id="nameMed6"></span>:<span id="rangeMed6"></span>
+    <span id="nameBig6"></span>:<span id="rangeBig6"></span>
+   </td>   
+   <td bgcolor="#0F770F">
+    ID:<span id="devId7"></span>
+    <span id="nameSmall7"></span>:<span id="rangeSmall7"></span>
+    <span id="nameMed7"></span>:<span id="rangeMed7"></span>
+    <span id="nameBig7"></span>:<span id="rangeBig7"></span>
+   </td>   
+   <td bgcolor="#FFFFFF">
+    ID:<span id="devId8"></span>
+    <span id="nameSmall8"></span>:<span id="rangeSmall8"></span>
+    <span id="nameMed8"></span>:<span id="rangeMed8"></span>
+    <span id="nameBig8"></span>:<span id="rangeBig8"></span>
+   </td>
+</tr>
+<table>
+</body>
+</html>
+
