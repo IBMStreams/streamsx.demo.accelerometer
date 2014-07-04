@@ -1,0 +1,78 @@
+namespace basic.accelerometer ;
+/*
+# Copyright IBM Corp. 2013, 2014
+# Distribute this code under MIT License
+*/
+timestamp toTimestamp(int64 milisec){ // milsec since 1/1/70
+	timestamp ts = createTimestamp( milisec/1000l,(uint32)(milisec % 1000l * 1000000l));
+    return ts; 
+ }
+
+rstring toTimeString(int64 milisec){
+	mutable Sys.tm tms = { sec = 0, min = 0, hour = 0, mday = 0, mon = 0, year = 0, wday = 0, yday = 0, isdst = 0, gmtoff
+	= 0, zone = "GMT" } ;
+	gmtime(toTimestamp(milisec), tms);
+	return strftime(tms, "%c");
+}
+type ACCEL_type = tuple<ACCEL_ID_type ID, ACCEL_ALPHA_type ALPHA, ACCEL_BETA_type BETA, ACCEL_GAMMA_type GAMMA,
+	ACCEL_X_type X, ACCEL_Y_type Y, ACCEL_Z_type Z, ACCEL_TIME_type TIME, rstring wsRemote> ;
+	/** 
+	 * Accelerometer data a retrieved from the  hardware with attributes described here :[http://dev.w3.org/geo/api/spec-source-orientation.html], 
+	 */
+type accel_type = tuple<rstring id, float64 alpha, float64 beta, float64 gamma, float64 x, float64 y, float64 z,
+	timestamp time, rstring timeString> ;
+type ACCEL_ID_type = tuple<rstring _text> ;
+type ACCEL_ALPHA_type = tuple<float64 _flt64> ;
+type ACCEL_BETA_type = tuple<float64 _flt64> ;
+type ACCEL_GAMMA_type = tuple<float64 _flt64> ;
+type ACCEL_X_type = tuple<float64 _flt64> ;
+type ACCEL_Y_type = tuple<float64 _flt64> ;
+type ACCEL_Z_type = tuple<float64 _flt64> ;
+type ACCEL_TIME_type = tuple<int64 _int64> ;
+/**
+ * Convert an rstring into a accel_type with accelerometer data. 
+ * This composite is in support of ReceiveToSend(). 
+ * 
+ * Input is an rstring with XML.
+ * 
+ * The preamble for the XML is '/MESSAGE'    
+ *
+@input rawXML that is an XML document. 
+@output accelPos_out the accelerometer data extracted from the XML document.
+ *  
+ */
+composite FormatXML(input rawXML ; output accelPos_out){
+/**
+*/
+	graph
+
+		(stream<rawXML> Filter_3_out0)as Filter_3 = Filter(rawXML){
+			param
+				filter : "<MESSAGE>" == wsMessage [ : 10 ] ;
+		}	
+	
+		stream<ACCEL_type> accelPos = XMLParse(Filter_3_out0 as inPort0Alias){
+			param
+				trigger : "/MESSAGE" ;
+				parsing : permissive ;
+				xmlInput : wsMessage ;
+			output
+				accelPos : ID = XPath("ID", { _text = XPath("text()")}), ALPHA = XPath("ALPHA", { _flt64
+					=(float64)XPath("text()")}), BETA = XPath("BETA", { _flt64 =(float64)XPath("text()")}), GAMMA = XPath("GAMMA", {
+					_flt64 =(float64)XPath("text()")}), X = XPath("X", { _flt64 =(float64)XPath("text()")}), Y = XPath("Y", { _flt64
+					=(float64)XPath("text()")}), Z = XPath("Z", { _flt64 =(float64)XPath("text()")}), TIME = XPath("TIME", { _int64
+					=(int64)XPath("text()")});
+		}
+
+		(stream<accel_type> accelPos_out)as Functor_2 = Functor(accelPos){
+			output
+				accelPos_out : id = ID._text, alpha = ALPHA._flt64, beta = BETA._flt64, gamma = GAMMA._flt64, x = X._flt64, y =
+					X._flt64, z = Z._flt64, time = toTimestamp(TIME._int64), timeString = toTimeString(TIME._int64) ;
+		}
+
+
+}
+
+
+
+

@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<!---
+# Copyright IBM Corp. 2011, 2012, 2013, 2014
+# Distribute this code under MIT License
+
+    The goal of this script is to demonstrate collecting data from accelerometer and transmitting it
+    via WebSocket interface. An associated Streams application will be waiting on the other side
+    of the WebSocket to process the data. 
+   
+    This is part of an example, learn by using...
+    mags
+    
+    
+--->
+<html>
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>Streams Accelerometer</title>
+   <link rel="stylesheet" href="support.css" type="text/css"></link>
+
+    <style type="text/css">
+        .olControlAttribution {
+            bottom: 5px;
+        }
+    </style>
+
+    <script type="text/javascript">
+var isEventSupported = (function(undef) {
+
+    var TAGNAMES = {
+        'select':'input',
+        'change':'input',
+        'submit':'form',
+        'reset':'form',
+        'error':'img',
+        'load':'img',
+        'abort':'img'
+    };
+
+    function isEventSupported(eventName, element) {
+        element = element || document.createElement(TAGNAMES[eventName] || 'div');
+        eventName = 'on' + eventName;
+
+        var isSupported = (eventName in element);
+
+        if (!isSupported) {
+            // if it has no `setAttribute` (i.e. doesn't implement Node interface), try generic element
+            if (!element.setAttribute) {
+                element = document.createElement('div');
+            }
+            if (element.setAttribute && element.removeAttribute) {
+                element.setAttribute(eventName, '');
+                isSupported = typeof element[eventName] == 'function';
+
+                // if property was created, "remove it" (by setting value to `undefined`)
+                if (typeof element[eventName] != 'undefined') {
+                    element[eventName] = undef;
+                }
+                element.removeAttribute(eventName);
+            }
+        }
+
+        element = null;
+        return isSupported;
+    }
+
+    return isEventSupported;
+})();
+    </script>
+
+    <script type="text/javascript">
+        var nodeName = "";
+        var portID = "8084";
+        function init() {
+            if (isEventSupported('deviceorientation', window) || isEventSupported('mozorientation', window) || isEventSupported('devicemotion', window)) {
+                document.getElementById("formID").value = "DevId:" + Math.floor(Math.random()*100);
+                var ip = location.host;
+    	        nodeName = (ip.split(":") == 1) ? "ws://" + ip : ip.split(":")[0] + ":" + portID;
+                document.getElementById("formWS").value = nodeName;   	         
+                if (window.DeviceOrientationEvent) {
+                    window.addEventListener("deviceorientation", function (event) {
+                        document.getElementById('resultDeviceOrientation').innerHTML = '';
+                        if (typeof(event.alpha) != 'undefined') {
+                            document.getElementById('resultDeviceOrientation').innerHTML = document.getElementById('resultDeviceOrientation').innerHTML + "Alpha: " + event.alpha + "<br>";
+                            document.getElementById('resultDeviceOrientation').innerHTML = document.getElementById('resultDeviceOrientation').innerHTML + "Beta: " + event.beta + "<br>";
+                            document.getElementById('resultDeviceOrientation').innerHTML = document.getElementById('resultDeviceOrientation').innerHTML + "Gamma: " + event.gamma + "<br>";
+                        }
+                        if (typeof(event.absolute) != 'undefined') {
+                            document.getElementById('resultDeviceOrientation').innerHTML = document.getElementById('resultDeviceOrientation').innerHTML + "Gamma: " + event.absolute + "<br>";
+                        }
+                        if (typeof(event.compassCalibrate) != 'undefined') {
+                            document.getElementById('resultDeviceOrientation').innerHTML = document.getElementById('resultDeviceOrientation').innerHTML + "Gamma: " + event.compassCalibrated + "<br>";
+                        }
+                    }, true);
+                }
+                if (window.DeviceMotionEvent) {
+                    window.addEventListener('devicemotion', function (event) {
+                        document.getElementById('resultDeviceMotion').innerHTML = '';
+                        if (typeof(event.accelerationIncludingGravity) != 'undefined') {
+                            document.getElementById('resultDeviceMotion').innerHTML = document.getElementById('resultDeviceMotion').innerHTML + "accelerationIncludingGravity.x: " + event.accelerationIncludingGravity.x + "<br>";
+                            document.getElementById('resultDeviceMotion').innerHTML = document.getElementById('resultDeviceMotion').innerHTML + "accelerationIncludingGravity.y: " + event.accelerationIncludingGravity.y + "<br>";
+                            document.getElementById('resultDeviceMotion').innerHTML = document.getElementById('resultDeviceMotion').innerHTML + "accelerationIncludingGravity.z: " + event.accelerationIncludingGravity.z + "<br>";
+                        }
+                        if (typeof(event.acceleration) != 'undefined') {
+                            document.getElementById('resultDeviceMotion').innerHTML = document.getElementById('resultDeviceMotion').innerHTML + "acceleration.x: " + event.acceleration.x + "<br>";
+                            document.getElementById('resultDeviceMotion').innerHTML = document.getElementById('resultDeviceMotion').innerHTML + "acceleration.y: " + event.acceleration.y + "<br>";
+                            document.getElementById('resultDeviceMotion').innerHTML = document.getElementById('resultDeviceMotion').innerHTML + "acceleration.z: " + event.acceleration.z + "<br>";
+                        }
+                        if (typeof(event.rotationRate) != 'undefined') {
+                            document.getElementById('resultDeviceMotion').innerHTML = document.getElementById('resultDeviceMotion').innerHTML + "rotationRate.alpha: " + event.rotationRate.alpha + "<br>";
+                            document.getElementById('resultDeviceMotion').innerHTML = document.getElementById('resultDeviceMotion').innerHTML + "rotationRate.beta: " + event.rotationRate.beta + "<br>";
+                            document.getElementById('resultDeviceMotion').innerHTML = document.getElementById('resultDeviceMotion').innerHTML + "rotationRate.gamma: " + event.rotationRate.gamma + "<br>";
+                        }
+                    }, true);
+                }
+                if (window.MozOrientation) {
+                    window.addEventListener("MozOrientation", function (orientation) {
+                        document.getElementById('resultMozOrientation').innerHTML = "orientation.x: " + orientation.x + "<br>";
+                        document.getElementById('resultMozOrientation').innerHTML = document.getElementById('resultMozOrientation').innerHTML + "orientation.y: " + orientation.y + "<br>";
+                        document.getElementById('resultMozOrientation').innerHTML = document.getElementById('resultMozOrientation').innerHTML + "orientation.z: " + orientation.z + "<br>";
+                    }, true);
+                }
+            } else {
+                alert("Unfortunately, your brower doesn't support the orientation usage");
+            }
+
+        }
+        var ws = null;
+
+        
+        function WebSocketTest() {
+            if ("WebSocket" in window) {
+                var userMsg = document.getElementById('userMsg');
+                alert("WebSocket is supported by your Browser!");
+                // Let us open a web socket
+                var wsSoc = "ws://" + document.getElementById("formWS").value.trim();
+                ws = new WebSocket(wsSoc)
+                ws.onopen = function () {
+                    // Web Socket is connected, send data using send()
+                    ws.send("<CONTROL>ID "+ document.getElementById("formID").value  + " STARTING</CONTROL>");
+                    userMsg.innerHTML = "Transmitting on port : " + portID;
+                    alert("Message is sent...");
+                };
+                ws.onmessage = function (evt) {
+                    var received_msg = evt.data;
+                    userMsg.innerHTML = "Alert:<b>" + received_msg + "</b>";
+                    //alert("Message is received...");
+                };
+                ws.onclose = function () {
+                    // websocket is closed.
+                    alert("Connection is closed...");
+                    userMsg.innerHTML = "Connection closed....";
+                    ws = null;
+                };
+            }
+            else {
+                // The browser doesn't support WebSocket
+                alert("WebSocket NOT supported by your Browser!");
+            }
+        }
+        /// End of WebSocketTest()
+// Setup for Accelerometer.
+
+        (function () {
+            var measurements = {
+                        x: "NO HARDWARE - USE SIMULATOR",
+                        y: "NO HARDWARE - USE SIMULATOR",
+                        z: "NO HARDWARE - USE SIMULATOR",
+                        alpha: "NO HARDWARE - USE SIMULATOR",
+                        beta: "NO HARDWARE - USE SIMULATOR",
+                        gamma: "NO HARDWARE - USE SIMULATOR"
+                    },
+                    calibration = {
+                        x: 0,
+                        y: 0,
+                        z: 0,
+                        alpha: 0,
+                        beta: 0,
+                        gamma: 0
+                    },
+                    interval = null,
+                    features = [];
+
+            window.gyro = {};
+
+            /**
+             * @public
+             */
+            gyro.frequency = 100; //ms
+
+            gyro.calibrate = function () {
+                for (var i in measurements) {
+                    calibration[i] = (typeof measurements[i] === 'number') ? measurements[i] : 0;
+                }
+            };
+
+            gyro.getOrientation = function () {
+                return measurements;
+            };
+
+            gyro.startTracking = function (callback) {
+                interval = setInterval(function () {
+                    callback(measurements);
+                }, gyro.frequency);
+            };
+
+            gyro.stopTracking = function () {
+                clearInterval(interval);
+            };
+
+            /**
+             * Current available features are:
+             * MozOrientation
+             * devicemotion
+             * deviceorientation
+             */
+            gyro.hasFeature = function (feature) {
+                for (var i in features) {
+                    if (feature == features[i]) {
+                        return true;
+                    }
+                }
+                return false;
+            };
+
+            gyro.getFeatures = function () {
+                return features;
+            };
+
+
+            /**
+             * @private
+             */
+
+            function setupListeners() {
+                window.addEventListener('MozOrientation', function (e) {
+                    features.push('MozOrientation');
+                    measurements.x = e.x - calibration.x;
+                    measurements.y = e.y - calibration.y;
+                    measurements.z = e.z - calibration.z;
+                }, true);
+
+                window.addEventListener('devicemotion', function (e) {
+                    features.push('devicemotion');
+                    measurements.x = e.accelerationIncludingGravity.x - calibration.x;
+                    measurements.y = e.accelerationIncludingGravity.y - calibration.y;
+                    measurements.z = e.accelerationIncludingGravity.z - calibration.z;
+                }, true);
+
+                window.addEventListener('deviceorientation', function (e) {
+                    features.push('deviceorientation');
+                    measurements.alpha = e.alpha - calibration.alpha;
+                    measurements.beta = e.beta - calibration.beta;
+                    measurements.gamma = e.gamma - calibration.gamma;
+                }, true);
+            }
+
+            setupListeners();
+
+        })(window);
+
+        gyro.startTracking(function (o) {
+            var b = document.getElementById('example');
+            var currentTime = document.getElementById('currentTime');
+            var f = document.getElementById('features');
+            //f.innerHTML = gyro.getFeatures();  // list the features.....
+            var actDate = new Date();
+	    var currentTimeValue = actDate.getTime();
+	    currentTime.innerHTML = currentTimeValue;
+            f.innerHTML = "ws :" + ws;
+            msg = "<MESSAGE>" +
+                    "<ID>" + document.getElementById("formID").value + "</ID>" +
+                    "<TIME>" + currentTimeValue + "</TIME>" +
+                    "<ALPHA>" + o.alpha + "</ALPHA>" +
+                    "<BETA>" + o.beta + "</BETA>" +
+                    "<GAMMA>" + o.gamma + "</GAMMA>" +
+                    "<X>" + o.x + "</X>" +
+                    "<Y>" + o.y + "</Y>" +
+                    "<Z>" + o.z + "</Z>" +
+                    "</MESSAGE>";
+            var jsonMsg = {"id":document.getElementById("formID").value,
+                    "alpha": o.alpha, "beta": o.beta, "gamma": o.gamma,
+                    "x": o.x, "y":o.y, "z":o.z};
+
+
+            b.innerHTML = 
+                    "<h2>Device Orientation</h2>" + 
+                     "<table>" + 
+	             "<tr><th>Alpha</th><th>Beta</th><th>Gamma</th></tr>" +
+	             "<tr>" +
+                    "<td class>" + o.alpha + "</td><td>" + o.beta + "</td><td>" + o.gamma + "</td>" +
+                    "</tr></tr>" +
+                    "</table>" + 
+                    "<h3>Acceleration Incuding Gravity</h3>" + 
+                    "<table>" +
+	             "<tr><th>X</th><th>Y</th><th>Z</th></tr>" +
+                    "<td>" + o.x + "</td><td>" + o.y + "</td><td>" + o.z + "</td>" +
+                    "</tr></table>" +
+					"<p> id:: " + document.getElementById("formID").value;                    
+
+            if (ws != null) {
+                ws.send(msg)
+            }
+        });
+
+
+    </script>
+</head>
+<body onload="init()">
+<form>
+<table>
+<tr>
+  <th>Device Ident</th><th>WS reciever</th>
+</tr>
+<tr>
+  <td><input type="text" id="formID"></td>
+  <td><input type="text" id="formWS"></td>
+</tr>
+</table>
+</form>
+</p>
+<div id="sse">
+   <p align="center"><a class="button blue" href="javascript:WebSocketTest()" >Start Transmitting</a></p>
+</div>
+Scroll down to see transmissions...
+<span id="example"></span>
+<h4>Communications</h4>
+Message:<span id="userMsg">TRANSMISSION NOT STARTED</span><br>
+Socket: <span id="features">INACTIVE</span><br>
+Time:<span id="currentTime"></span><br>
+
+<p>
+    The orientation specification can be found <a href="http://dev.w3.org/geo/api/spec-source-orientation.html">here</a>.
+</p>
+
+<h1>Device motion</h1>
+
+<div id="resultDeviceMotion">
+
+</div>
+<h1>Device orientation</h1>
+
+<div id="resultDeviceOrientation">
+
+</div>
+<h1>MOZ orientation</h1>
+
+<div id="resultMozOrientation">
+</div>
+
+</body>
+</html>
