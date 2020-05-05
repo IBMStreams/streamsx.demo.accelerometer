@@ -47,13 +47,13 @@ type render_type = tuple<rstring id, float64 rangeSmall, float64 rangeMed, float
  * *Bridged Networking*. 
  *   
  */
-composite ReceiveToSend {
+public composite ReceiveToSend {
 	graph
 		(stream<rstring wsMessage, rstring wsRemoteId> wsReceive)as WsReceive = WebSocketInject(){
 			param
 				port : 8084 ;
-				messageAttribute : "wsMessage" ;
-				senderIdAttribute : "wsRemoteId" ;
+				messageAttributeName : "wsMessage" ;
+				senderIdAttributeName : "wsRemoteId" ;
 		}
 
 		()as RawDisplay = FileSink(wsReceive){
@@ -81,7 +81,7 @@ composite ReceiveToSend {
 			param
 				port : 8080 ;
 				context : "html" ;
-				contextResourceBase : dataDirectory() + "/html" ;				
+				contextResourceBase : getThisToolkitDir()+"/opt/html" ;				
 		}
 }
 
