@@ -81,7 +81,7 @@ composite ReceiveToSend {
 			param
 				port : 8080 ;
 				context : "html" ;
-				contextResourceBase : getThisFileDir()+ "/../data/html" ;				
+				contextResourceBase : dataDirectory() + "/html" ;				
 		}
 }
 
